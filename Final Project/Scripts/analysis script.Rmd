@@ -1,0 +1,652 @@
+---
+title: "analysis script"
+output: html_document
+---
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+
+setwd("/Users/katrine/Desktop/Final project")
+getwd()
+```
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      warning = FALSE,
+                      message = FALSE)
+
+```
+
+
+```{r setup, include=FALSE}
+#Loading the needed packages
+
+library(tidyverse) 
+library(here)
+library(jsonlite)
+library(dplyr)
+library(pdftools)
+library(tidytext)
+library(textdata)
+library(ggplot2)
+library(radiant.data)
+
+
+```
+
+
+Import data-sets:
+```{r}
+
+dk19 <- fromJSON(
+  "denmark19.json",
+  flatten = FALSE)
+
+dk26 <- fromJSON(
+  "denmark26.json",
+  flatten = FALSE)
+
+dk3 <- fromJSON(
+  "denmark3.json",
+  flatten = FALSE)
+
+dk10 <- fromJSON(
+  "denmark10.json",
+  flatten = FALSE)
+
+dk17 <- fromJSON(
+  "denmark17.json",
+  flatten = FALSE)
+
+
+no19 <- fromJSON(
+  "norway19.json",
+  flatten = FALSE)
+
+no26 <- fromJSON(
+  "norway26.json",
+  flatten = FALSE)
+
+no3 <- fromJSON(
+  "norway3.json",
+  flatten = FALSE)
+
+no10 <- fromJSON(
+  "norway10.json",
+  flatten = FALSE)
+
+no17 <- fromJSON(
+  "norway17.json",
+  flatten = FALSE)
+
+se26 <- fromJSON(
+  "sweden26.json",
+  flatten = FALSE)
+
+se3 <- fromJSON(
+  "sweden3.json",
+  flatten = FALSE) 
+
+se10 <- fromJSON(
+  "sweden10.json",
+  flatten = FALSE) 
+
+se17 <- fromJSON(
+  "sweden17.json",
+  flatten = FALSE) 
+
+ger19 <- fromJSON(
+  "germanyms19.json",
+  flatten = FALSE)
+
+ger26 <- fromJSON(
+  "germanyms26.json",
+  flatten = FALSE) 
+
+ger3 <- fromJSON(
+  "germanyms3.json",
+  flatten = FALSE) 
+
+ger10 <- fromJSON(
+  "germanyms10.json",
+  flatten = FALSE) 
+
+ger17 <- fromJSON(
+  "germanyms17.json",
+  flatten = FALSE) 
+
+```
+
+
+```{r}
+#Merge datasets from different dates:
+dk <- rbind(dk19, dk26, dk3, dk10, dk17)
+
+no <- rbind(no19, no26, no3, no10, no17)
+
+se <- rbind(se26, se3, se10, se17)
+
+ger <- rbind(ger19, ger26, ger3, ger10, ger17)
+
+#Deleting dataframes from specifik dates in order to avoid typing mistakes:
+
+rm(dk19, dk26, dk3, dk10, dk17, no19, no26, no3, no10, no17, se26, se3, se10, se17, ger19, ger26, ger3, ger10, ger17)
+
+```
+
+
+```{r}
+#sorting by when the post was created
+dk %>% 
+  arrange(desc(created_at)) -> dk
+
+no %>% 
+  arrange(desc(created_at)) -> no
+
+se %>% 
+  arrange(desc(created_at)) -> se
+
+ger %>% 
+  arrange(desc(created_at)) -> ger
+
+#transforming NULL to NA:
+
+dk[dk == "NULL"] <- NA
+no[no == "NULL"] <- NA
+se[se == "NULL"] <- NA
+ger[ger == "NULL"] <- NA
+
+```
+
+#Cleaning: 
+The data-frame dk19 consists of a mix of actual tweets, retweets and replies. I want to split those into seperate dataframes:
+```{r}
+# Creating dataframe consisting of only actual tweets:
+
+# First I remove the retweets
+dk_tweets <- dk[dk$is_retweet==FALSE, ] 
+no_tweets <- no[no$is_retweet==FALSE, ] 
+se_tweets <- se[se$is_retweet==FALSE, ] 
+ger_tweets <- ger[ger$is_retweet==FALSE, ] 
+
+# Then I remove the replies
+dk_tweets <- subset(dk_tweets, is.na(dk_tweets$reply_to_status_id)) 
+no_tweets <- subset(no_tweets, is.na(no_tweets$reply_to_status_id)) 
+se_tweets <- subset(se_tweets, is.na(se_tweets$reply_to_status_id)) 
+ger_tweets <- subset(ger_tweets, is.na(ger_tweets$reply_to_status_id)) 
+
+# Creating dataframe consisting of only retweets:
+dk_retweets <- dk[dk$is_retweet==TRUE,]
+no_retweets <- no[no$is_retweet==TRUE,]
+se_retweets <- se[se$is_retweet==TRUE,]
+ger_retweets <- ger[ger$is_retweet==TRUE,]
+
+# Creating data frame consisting of only replies:
+dk_replies<- subset(dk, !is.na(dk$reply_to_status_id))
+no_replies<- subset(no, !is.na(no$reply_to_status_id))
+se_replies<- subset(se, !is.na(se$reply_to_status_id))
+ger_replies<- subset(no, !is.na(ger$reply_to_status_id))
+
+```
+
+
+#STARTING TO ANALYSE!:
+
+#Q1: An initial comparison: Which country tweet most about face masks compared to the number of inhabitants? 
+
+```{r}
+#Loading the dataset "wpp2019" from the United Nations in order to get the most recent numbers for the world population:
+
+library(wpp2019)
+data(pop)
+
+#removing unnecessary dataframes:
+rm(popF)
+rm(popM)
+rm(popFT)
+rm(popMT)
+
+#making a dataframe with the numbers of inhabitants for Denmark, Sweden, Norway and Germany:
+
+pop_rel <- pop %>% 
+ select("2020", "name") %>% 
+ filter (name %in% c("Denmark", "Sweden","Norway", "Germany"))
+
+```
+
+
+```{r}
+#calculating average number of posts per citizen by dividing number of inhabitants (found in the pop_rel dataframe) with the number of tweets (the number of observations for the tweets dataframe)
+
+
+dk_tweets_av <- 2711/5792203
+as.numeric(dk_tweets_av)
+cat(dk_tweets_av)
+
+no_tweets_av <- 1735/5421242
+as.numeric(no_tweets_av)
+cat(no_tweets_av)
+
+se_tweets_av <- 4065/5421242
+as.numeric(se_tweets_av)
+cat(se_tweets_av)
+   
+ger_tweets_av <- 2973/5421242
+as.numeric(ger_tweets_av)
+cat(ger_tweets_av)
+
+#make dataframe
+tweets_av <- c(dk_tweets_av, no_tweets_av, se_tweets_av, ger_tweets_av)
+country <- c('Denmark', 'Norway', 'Sweden', 'Germany') 
+
+compared_av <- data.frame(tweets_av, country)
+
+#COMPARISON:
+#Which country tweet the most compared to the number of inhabitants? 
+compared_av <- compared_av %>% 
+ select(tweets_av, country) %>% 
+  arrange(desc(tweets_av)) 
+
+head(compared_av)
+
+#export scheme
+write.table(compared_av, file= "compared_av.csv", sep=",")
+
+```
+#Q2: Which kind of tweets are most retweeted, quoted, replied and favourited?
+At Twitter users are able to repost ("retweet") other peoples' tweets, quote and reply to others tweets, as well as mark posts as "favourites". By investigating retweets and favourites, using the retweet_count-, quote_count-, reply_count- and favourite_count-coloumns, it's possible to tell which posts containing the word for facemask, that are retweeted, quoted, replied and favouritecounted:
+
+
+```{r}
+
+#Which tweets have been retweetet the most?
+
+dk_tweets_retweet <- dk_tweets %>% arrange(-retweet_count)
+dk_top10_retweet <- dk_tweets_retweet[1:10, "text"]
+
+no_tweets_retweet <- no_tweets %>% arrange(-retweet_count)
+no_top10_retweet <- no_tweets_retweet[1:10, "text"]
+
+se_tweets_retweet <- se_tweets %>% arrange(-retweet_count)
+se_top10_retweet <- se_tweets_retweet[1:10, "text"]
+
+ger_tweets_retweet <- ger_tweets %>% arrange(-retweet_count)
+ger_top10_retweet <- ger_tweets_retweet[1:10, "text"]
+
+#Which tweets have been quoted the most?
+
+dk_tweets_quote <- dk_tweets %>% arrange(-quote_count)
+dk_top10_quote <- dk_tweets_quote[1:10, "text"]
+
+no_tweets_quote <- no_tweets %>% arrange(-quote_count)
+no_top10_quote <- no_tweets_quote[1:10, "text"]
+
+se_tweets_quote <- se_tweets %>% arrange(-quote_count)
+se_top10_quote <- se_tweets_quote[1:10, "text"]
+
+ger_tweets_quote <- ger_tweets %>% arrange(-quote_count)
+ger_top10_quote <- ger_tweets_quote[1:10, "text"]
+
+
+#Which tweets have most replies?
+
+dk_tweets_reply <- dk_tweets %>% arrange(-reply_count)
+dk_top10_reply <- dk_tweets_reply[1:10, "text"]
+
+no_tweets_reply <- no_tweets %>% arrange(-reply_count)
+no_top10_reply <- no_tweets_reply[1:10, "text"]
+
+se_tweets_reply <- se_tweets %>% arrange(-reply_count)
+se_top10_reply <- se_tweets_reply[1:10, "text"]
+
+ger_tweets_reply <- ger_tweets %>% arrange(-reply_count)
+ger_top10_reply <- ger_tweets_reply[1:10, "text"]
+
+
+#Which tweets have most favourite counts?
+
+dk_tweets_favourite <- dk_tweets %>% arrange(-favorite_count)
+dk_top10_favourite <- dk_tweets_favourite[1:10, "text"]
+
+no_tweets_favourite <- no_tweets %>% arrange(-favorite_count)
+no_top10_favourite <- no_tweets_favourite[1:10, "text"]
+
+se_tweets_favourite <- se_tweets %>% arrange(-favorite_count)
+se_top10_favourite <- se_tweets_favourite[1:10, "text"]
+
+ger_tweets_favourite <- ger_tweets %>% arrange(-favorite_count)
+ger_top10_favourite <- ger_tweets_favourite[1:10, "text"]
+
+
+```
+
+#Comparing the countries:
+The goal is to make a scheme for each of the categories containing the top 10 most retweeted, favouritecounted, replied and quoted tweets for each country. 
+
+```{r}
+
+#make dataframe comparing the 10 tweets with most retweets in the countries:
+
+compared_retweet <- data.frame(dk_top10_retweet, no_top10_retweet, se_top10_retweet, ger_top10_retweet)
+
+#make dataframe comparing the 10 tweets with most replies in the countries:
+
+compared_reply <- data.frame(dk_top10_reply, no_top10_reply, se_top10_reply, ger_top10_reply)
+
+#make dataframe comparing the 10 tweets most quoted in the countries:
+
+compared_quote <- data.frame(dk_top10_quote, no_top10_quote, se_top10_quote, ger_top10_quote)
+
+
+#make dataframe comparing the 10 tweets with most favourite counts in the countries:
+
+compared_favourite <- data.frame(dk_top10_favourite, no_top10_favourite, se_top10_favourite, ger_top10_favourite)
+
+```
+
+#Q3: Which hashtags are most frequently included in posts about facemasks?
+
+```{r}
+
+#making a data-frame consisting of only the hashtags on seperate lines and without na's:
+
+dk_hash_tokenized <- dk_tweets %>% 
+  select("hashtags") %>% 
+  unnest() %>% 
+  na.omit(dk_hash_tokenized) 
+
+no_hash_tokenized <- no_tweets %>% 
+  select("hashtags") %>% 
+  unnest() %>% 
+  na.omit(no_hash_tokenized) 
+
+
+se_hash_tokenized <- se_tweets %>% 
+  select("hashtags") %>% 
+  unnest() %>% 
+  na.omit(se_hash_tokenized) 
+
+ger_hash_tokenized <- ger_tweets %>% 
+  select("hashtags") %>% 
+  unnest() %>% 
+  na.omit(ger_hash_tokenized) 
+
+
+#counting and arranging the hashtags in descending order:
+dk_hash_wc <- dk_hash_tokenized %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+no_hash_wc <- no_hash_tokenized %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+se_hash_wc <- dk_hash_tokenized %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+ger_hash_wc <- ger_hash_tokenized %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+#Inspecting the hashtags: 
+head(n = 16, dk_hash_wc)
+
+head(n = 16, no_hash_wc)
+
+head(n = 16, se_hash_wc)
+
+head(n = 16, ger_hash_wc)
+
+
+```
+I see a lot of obvious hashtags such as "Mundschutz", "COVID19" and "denmark". Hence, I wan't to filter away those in order to explore more interesting hashtags:
+
+```{r}
+#making my own stop-word-list containing obvious hashtags about COVID-19 and facemasks: 
+
+hashtags <- c("facemask", "facemasks", "mundbind", "Mundbind", "munnbind", "Munnbind", "munskydd", "andningsskydd", "ansiktsskydd", "Munskydd", "smittevern", "alltagsmaske", "Alltagsmasken", "Alltagsmaske", "mundschutz", "Mundschutz", "Schutzkleidung", "Schutzmasken", "mundnasenschutz", "maske", "Maske", "Masken", "masken", "covid19", "Covid19", "covid19dk", "Covid19dk", "corona", "Corona", "COVID19", "COVID19dk", "coronadk", "Covid_19", "covid_19", "coronavirus", "Coronavirus", "coronavirusdk", "COVID", "COVID__19", "COVID-19", "Covid", "covid", "coronavirussverige", "CoronaVirusSverige", "Covid19Sverige", "coronasverige", "coronaSverige", "CoronaSverige", "Coronasverige", "COVID19sverige", "coronakrisen", "korona", "Korona", "virus", "koronavirus", "Coronakrise", "SARSCoV2", "dk", "Danmark", "Denmark", "Sweden", "Sverige", "denmark", "CoronaVirusDE", "COVID19de","COVID-19", "COVIDー19", "covid19norge", "covidNorge", "CoronaVirusAT", "covid19Sverige", "covid19swed", "Coronakrisen", "coronaoplysning", "Coronapandemin", "Covid19Sverige", "Covid19sverige", "COVID19SWEDEN", "covidsverige", "COVID19sweden2020", "Maskepflicht", "Maskenpflicht", "masks", "Coronalov", "Epidemilov", "mask", "Deutschland", "Pandemie", "CORONAdk")
+
+stopwords_facemasks <- data.frame(hashtags)
+
+
+# using anti_join in order to filter away the hashtags defined in "stopwords_facemasks" for each country:
+
+dk_hash_wc <- dk_hash_tokenized %>% 
+  anti_join(stopwords_facemasks) %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+no_hash_wc <- no_hash_tokenized %>% 
+  anti_join(stopwords_facemasks) %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+se_hash_wc <- se_hash_tokenized %>% 
+  anti_join(stopwords_facemasks) %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+
+ger_hash_wc <- ger_hash_tokenized %>% 
+  anti_join(stopwords_facemasks) %>% 
+  count(hashtags) %>% 
+  arrange(-n)
+
+#inspecting the words again:
+
+head(n = 50, dk_hash_wc)
+head(n = 50, no_hash_wc)
+head(n = 50, se_hash_wc)
+head(n = 50, ger_hash_wc)
+
+```
+Much better! Now I want to compare the different countries
+
+```{r}
+
+# making dataframes consisting of the top10 most used hashtags in posts about facemasks for each country:
+
+dk_top_10_hash <- dk_hash_wc %>%
+  select(hashtags) %>% 
+  head(10)
+
+no_top_10_hash <- no_hash_wc %>%
+  select(hashtags) %>% 
+  head(10)
+
+se_top_10_hash <- se_hash_wc %>%
+  select(hashtags) %>% 
+  head(10)
+
+ger_top_10_hash <- ger_hash_wc %>%
+  select(hashtags) %>% 
+  head(10)
+
+#Making comparable dataframe:
+
+compared_top_10_hashtags <- data.frame(dk_top_10_hash, no_top_10_hash, se_top_10_hash, ger_top_10_hash)
+
+names(compared_top_10_hashtags) <- c("Denmark", "Norway", "Sweden", "Germany") 
+
+```
+I wanted to play around a bit with a barplot in order to visualize the most used hashtags:
+
+```{r}
+#Visualizing the most used hashtags in each country:
+
+#barplot:
+dk_hash_wc %>%
+  top_n(10) %>%
+  mutate(hashtags = reorder(hashtags, n)) %>%
+  ggplot(aes(x = hashtags, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(title = "Unique words Denmark")
+
+no_hash_wc %>%
+  top_n(10) %>%
+  mutate(hashtags = reorder(hashtags, n)) %>%
+  ggplot(aes(x = hashtags, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(title = "Unique words Norway")
+
+se_hash_wc %>%
+  top_n(10) %>%
+  mutate(hashtags = reorder(hashtags, n)) %>%
+  ggplot(aes(x = hashtags, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(title = "Unique words Sweden")
+
+ger_hash_wc %>%
+  top_n(10) %>%
+  mutate(hashtags = reorder(hashtags, n)) %>%
+  ggplot(aes(x = hashtags, y = n)) +
+  geom_col() +
+  xlab(NULL) +
+  coord_flip() +
+      labs(title = "Unique words Germany")
+```
+FOR DENMARK ONLY:
+
+#Q4: Who posts the most? The authorities, the media or the citizens?  
+```{r}
+
+# making a list containing names of Danish media posting about facemasks on twitter:
+
+media_dk <- c("DRnyheder", "DRNyheder", "politiken", "tv2nyheder", "deviralenyheder", "detstuerene", "tv2newsdk", "tvmidtvest", "tv2lorry", "jyllandsposten", "tv2breaking", "berlingske", "jpaarhus", "nyhedsmikset", "viborgfolkeblad", "SdbNYT", "wwwjvdk", "JPdebat", "stiftendk", "dkdoxtv", "avisennu", "TjekDet", "pressefotosdk", "nationen", "btdk", 
+"journalistendk", "LokalavisenAarh", "DRostjylland", "DRBreaking", "DRViden", "DRDetektor", "TV2Nord", "fyensdk", "FriePresseDK", "videnskabdk", 	
+"ibyendk", "24NYTdk", "kristeligt", "Ugeskriftet", "PRESSELOGEN")
+
+media_dk <- as.data.frame(media_dk)
+names(media_dk) <- "screen_name"
+
+# making a list containing names of Danish authorities posting about facemasks on twitter:
+
+authorities_dk <- c("Astridkrag", "SSTbrostrom", "skaarup_df", "BennyEngelbrech", "DanmarksParti", "CoronavirusDk", "BillundAirCente", "hkkommunal", "Rigshospitalet", "Heunicke", "MVSJPoliti", "DanishMFA", "SyddanskUni", "NjylPoliti", "Socialindenrigs", "Sygeplejeraadet", "VestegnsPoliti", "NorddjursPortal", "veganerpartiet", "SjylPoliti", "VenstreEU")
+
+authorities_dk <- as.data.frame(authorities_dk)
+names(authorities_dk) <- "screen_name"
+
+# making a dataframe consisting of Danish citizens posting about facemasks on twitter:
+
+dk_citizens <- dk_tweets %>% 
+select(screen_name) %>% 
+anti_join (media_dk) %>% 
+anti_join (authorities_dk) 
+
+# making a dataframe consisting of Danish authorities posting about facemasks on twitter:
+
+dk_authorities <- dk_tweets %>% 
+select(screen_name) %>% 
+anti_join (media_dk) %>% 
+anti_join (dk_citizens) 
+
+# making a dataframe consisting of Danish media posting about facemasks on twitter:
+
+dk_media <- dk_tweets %>% 
+select(screen_name) %>% 
+anti_join (dk_citizens) %>% 
+anti_join (authorities_dk) 
+
+#VISUALISING:
+
+# Creating a data frame consiting of the names of the three categories of posters as well as the number of observations for each:
+
+data <- data.frame(
+  category=c("Media", "Citizens", "Authorities"),
+  count=c(150, 1733, 71)
+)
+
+
+# Adding columns 
+data$fraction = data$count / sum(data$count)
+data$percentage = data$count / sum(data$count) * 100
+data$ymax = cumsum(data$fraction)
+data$ymin = c(0, head(data$ymax, n=-1))
+
+# Rounding the data to two decimal points
+data <- round_df(data, 2)
+
+# Specify what the legend should say
+Posters_of_Tweets <- paste(data$category, data$percentage, "%")
+ggplot(data, aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Posters_of_Tweets)) +
+  geom_rect() +
+  coord_polar(theta="y") + 
+  xlim(c(2, 4)) +
+  theme_void() +
+  theme(legend.position = "right")
+
+----
+
+
+```
+
+#O5: Trying out the SENTIDA-package for the top10 most favouritecounted posts in Denmark: 
+
+```{r}
+#Sentida is a Danish sentiment analysis tool. The sentida function takes in a string and an output argument. The output argument can be the default "total" or "mean". Output = "total" will provide an accumulated sentiment score for the string, wheras output = "mean" will provide a mean sentiment score per word in the string. I will use the total-argument, as I'm interested in the accumulated sentiment score of the post in total, not word by word 
+
+
+#Loading packages specific needed for working with SENTIDA:
+
+Sys.setlocale(category = "LC_ALL", locale = "UTF-8") #making it possible to work with æøå:
+
+library(pacman)
+p_load(ggplot2,stringr,dplyr,tidyverse, remotes, Sentida)
+
+#Using SENTIDA on top10 most favouritecouted tweets:
+
+#1.) 
+sentida("Det er simpelthen ud over min fatteevne, at folk mener, at Brostrøm er arrogant og viser sin magt ved at glemme et mundbind i et par minutter. Jeg har selv glemt det et par gange. Det er en fejl. Mennesker fejler. Kom nu videre.", output = "total")
+
+#2.) 
+sentida("Det er simpelthen ud over min fatteevne, at folk mener, at Brostrøm er arrogant og viser sin magt ved at glemme et mundbind i et par minutter. Jeg har selv glemt det et par gange. Det er en fejl. Mennesker fejler. Kom nu videre.", output = "total")
+
+#3.) 
+sentida("Mange taler om mundbind i øjeblikket. Jeg har skrevet lidt om mundbind i håbet om at skabe lidt klarhed: https://t.co/RpEKC2uFu9 https://t.co/evcFE8qyJo
+", output = "total")
+
+#4.) 
+sentida("Har lige klappet to ældre damer ned, fordi de gik på Hovedbanegården uden mundbind.  Da politiet kom for at påtale hjemmelsudfordringen i min handling, beroligede jeg dem med, at det naturligvis måtte gøres af hensyn til folkesundheden. #dkpol #COVID19dk #mink", output = "total")
+
+#5.)
+sentida("Intet kunne være mig mere ligegyldigt end om dygtige og troværdige @SSTbrostrom i et kort (eller længere) øjeblik i en næsten menneske tom kupé ikke havde mundbind på. Vi MÅ ikke blive et samfund hvor vi jagter hver eneste lille bitte petitesse småfejl hos hinanden. #videre
+", output = "total")
+
+#6.)
+sentida("Vi er på vej ind i en helt absurd verden styret af frygt, uden demokratisk kontrol. Vi har set det før og vi må slå bremserne i. Start med at vise jer frem uden mundbind.", output = "total")
+
+#7.) 
+sentida("Minkfarmerne, hvis mink er slået ned pga corona, tager til storbyer uden mundbind og holder heller ikke afstand. Borgerlige politikere bakker op og er selv uden mundbind.  Sig mig engang, er I helt blæste?", output = "total")
+
+#8.) 
+sentida("I går blev Søren Brostrøm udsat for spot og spe, fordi han ikke bar mundbind i toget, mens han spiste. I dag bliver Statsministeren udsat for samme, fordi hun bar beskyttelse ved besøg på en minkfarm. Sig mig er folk da gået fuldstændig fra koncepterne.", output = "total")
+
+#9.) 
+sentida("Intet kunne være mig mere ligegyldigt end om dygtige og troværdige @SSTbrostrom i et kort (eller længere) øjeblik i en næsten menneske tom kupé ikke havde mundbind på. Vi MÅ ikke blive et samfund hvor vi jagter hver eneste lille bitte petitesse småfejl hos hinanden. #videre", output = "total")
+
+#10.)
+sentida("Jeg har lige set et ungt menneske tage et brugt mundbind i en skraldespand uden for Fakta, tage det på sige “fuck it” til sin makker og gå ind - og jeg er officielt for gammel til alting. Plus at min hygiejneobsession aldrig har bonget så meget ud før 🤠😳😳😳 #yolo", output = "total")
+
+```{r}
+```
+
+
+
+
+````
+
+### Credits: 
+Inspired by: Adéla Sobotkova and Vojtěch Kaše's lessons, SENTIDA(Lauridsen, Dalsgaard & Svendsen 2019).https://towardsdatascience.com/a-guide-to-mining-and-analysing-tweets-with-r-2f56818fdd16,
