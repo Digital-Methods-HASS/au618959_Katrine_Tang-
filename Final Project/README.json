@@ -1,0 +1,30 @@
+{
+  "profile": "tabular-data-package",
+  "resources": [
+    {
+      "name": "resource1",
+      "profile": "tabular-data-resource",
+      "schema": {}
+    }
+  ],
+  "keywords": [
+    "face masks",
+    "twitter",
+    "covid19"
+  ],
+  "contributors": [
+    {
+      "title": "Katrine Tangø",
+      "role": "author"
+    }
+  ],
+  "licenses": [
+    {
+      "title": "MIT License",
+      "path": "https://github.com/Digital-Methods-HASS/au618959_Katrine_Tang-/blob/master/Final%20Project/LICENSE"
+    }
+  ],
+  "title": "Final Project Face Masks",
+  "name": "README",
+  "description": "This project is an exploration of Twitter posts about face masks in Denmark, Sweden, Norway and Germany. The posts have been scraped from Twitter, using the Rtweet-package, 5 times in total. The data is to be found in the folder 'data', the scraping script and analysis script in the 'scripts'-folder and finally different schemes and graphs made by running the script in the 'Data Output'-folder. This project is under a MIT license, which can be read in the 'LICENSE'-file. For further questions, please contact: au618959@uni.au.dk"
+}
